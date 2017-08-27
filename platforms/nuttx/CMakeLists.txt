@@ -88,6 +88,7 @@ target_link_libraries(${FW_NAME}
 	-Wl,--end-group
 
 	m
+	supc++
 	gcc
 	)
 
