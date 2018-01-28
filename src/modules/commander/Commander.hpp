@@ -36,7 +36,6 @@
 
 #include "state_machine_helper.h"
 
-#include <controllib/blocks.hpp>
 #include <px4_module.h>
 #include <px4_module_params.h>
 
@@ -88,6 +87,15 @@ public:
 	void enable_hil();
 
 private:
+
+	DEFINE_PARAMETERS(
+		(ParamFloat<px4::params::COM_HOME_H_T>) _home_eph_threshold,
+		(ParamFloat<px4::params::COM_HOME_V_T>) _home_epv_threshold,
+
+		(ParamFloat<px4::params::COM_POS_FS_EPH>) _eph_threshold,
+		(ParamFloat<px4::params::COM_POS_FS_EPV>) _epv_threshold,
+		(ParamFloat<px4::params::COM_VEL_FS_EVH>) _evh_threshold,
+	)
 
 	// Subscriptions
 	Subscription<mission_result_s> _mission_result_sub;
