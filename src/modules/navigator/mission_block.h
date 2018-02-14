@@ -77,6 +77,8 @@ protected:
 	 */
 	bool is_mission_item_reached();
 
+	bool position_achieved(const mission_item_s &item);
+
 	/**
 	 * Reset all reached flags
 	 */
