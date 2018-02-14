@@ -75,11 +75,6 @@ public:
 	void on_activation() override;
 	void on_active() override;
 
-	enum mission_altitude_mode {
-		MISSION_ALTMODE_ZOH = 0,
-		MISSION_ALTMODE_FOH = 1
-	};
-
 	enum mission_yaw_mode {
 		MISSION_YAWMODE_NONE = 0,
 		MISSION_YAWMODE_FRONT_TO_WAYPOINT = 1,
@@ -148,11 +143,6 @@ private:
 	void heading_sp_update();
 
 	/**
-	 * Updates the altitude sp to follow a foh
-	 */
-	void altitude_sp_foh_update();
-
-	/**
 	 * Update the cruising speed setpoint.
 	 */
 	void cruising_speed_sp_update();
@@ -162,7 +152,7 @@ private:
 	 */
 	void do_abort_landing();
 
-	float get_absolute_altitude_for_item(struct mission_item_s &mission_item);
+	float get_absolute_altitude_for_item(const mission_item_s &mission_item);
 
 	/**
 	 * Read the current and the next mission item. The next mission item read is the
@@ -229,7 +219,6 @@ private:
 
 	control::BlockParamFloat _param_dist_1wp;
 	control::BlockParamFloat _param_dist_between_wps;
-	control::BlockParamInt _param_altmode;
 	control::BlockParamInt _param_yawmode;
 	control::BlockParamInt _param_mnt_yaw_ctl;
 
@@ -251,11 +240,6 @@ private:
 	bool _inited{false};
 	bool _home_inited{false};
 	bool _need_mission_reset{false};
-
-	float _min_current_sp_distance_xy{FLT_MAX}; /**< minimum distance which was achieved to the current waypoint  */
-
-	float _distance_current_previous{0.0f}; /**< distance from previous to current sp in pos_sp_triplet,
-					    only use if current and previous are valid */
 
 	enum work_item_type {
 		WORK_ITEM_TYPE_DEFAULT,		/**< default mission item */
