@@ -98,6 +98,8 @@
 #include <uORB/topics/collision_report.h>
 #include <uORB/topics/sensor_accel.h>
 #include <uORB/topics/sensor_gyro.h>
+#include <uORB/topics/vehicle_air_data.h>
+#include <uORB/topics/vehicle_magnetometer.h>
 #include <uORB/uORB.h>
 
 
@@ -639,6 +641,8 @@ private:
 
 	MavlinkOrbSubscription *_bias_sub;
 	MavlinkOrbSubscription *_differential_pressure_sub;
+	MavlinkOrbSubscription *_magnetometer_sub;
+	MavlinkOrbSubscription *_air_data_sub;
 
 	uint64_t _accel_timestamp;
 	uint64_t _gyro_timestamp;
@@ -655,6 +659,8 @@ protected:
 		_sensor_time(0),
 		_bias_sub(_mavlink->add_orb_subscription(ORB_ID(sensor_bias))),
 		_differential_pressure_sub(_mavlink->add_orb_subscription(ORB_ID(differential_pressure))),
+		_magnetometer_sub(_mavlink->add_orb_subscription(ORB_ID(vehicle_magnetometer))),
+		_air_data_sub(_mavlink->add_orb_subscription(ORB_ID(vehicle_air_data))),
 		_accel_timestamp(0),
 		_gyro_timestamp(0),
 		_mag_timestamp(0),
@@ -680,20 +686,27 @@ protected:
 				_gyro_timestamp = sensor.timestamp;
 			}
 
-			if (_mag_timestamp != sensor.timestamp + sensor.magnetometer_timestamp_relative) {
+			vehicle_magnetometer_s magnetometer = {};
+			_magnetometer_sub->update(&magnetometer);
+
+			if (_mag_timestamp != magnetometer.timestamp) {
 				/* mark third group dimensions as changed */
 				fields_updated |= (1 << 6) | (1 << 7) | (1 << 8);
-				_mag_timestamp = sensor.timestamp + sensor.magnetometer_timestamp_relative;
+				_mag_timestamp = magnetometer.timestamp;
 			}
 
-			if (_baro_timestamp != sensor.timestamp + sensor.baro_timestamp_relative) {
+			vehicle_air_data_s air_data = {};
+			_air_data_sub->update(&air_data);
+
+			if (_baro_timestamp != air_data.timestamp) {
 				/* mark last group dimensions as changed */
 				fields_updated |= (1 << 9) | (1 << 11) | (1 << 12);
-				_baro_timestamp = sensor.timestamp + sensor.baro_timestamp_relative;
+				_baro_timestamp = air_data.timestamp;
 			}
 
 			sensor_bias_s bias = {};
 			_bias_sub->update(&bias);
+
 			differential_pressure_s differential_pressure = {};
 			_differential_pressure_sub->update(&differential_pressure);
 
@@ -706,13 +719,13 @@ protected:
 			msg.xgyro = sensor.gyro_rad[0] - bias.gyro_x_bias;
 			msg.ygyro = sensor.gyro_rad[1] - bias.gyro_y_bias;
 			msg.zgyro = sensor.gyro_rad[2] - bias.gyro_z_bias;
-			msg.xmag = sensor.magnetometer_ga[0] - bias.mag_x_bias;
-			msg.ymag = sensor.magnetometer_ga[1] - bias.mag_y_bias;
-			msg.zmag = sensor.magnetometer_ga[2] - bias.mag_z_bias;
-			msg.abs_pressure = 0;
+			msg.xmag = magnetometer.magnetometer_ga[0] - bias.mag_x_bias;
+			msg.ymag = magnetometer.magnetometer_ga[1] - bias.mag_y_bias;
+			msg.zmag = magnetometer.magnetometer_ga[2] - bias.mag_z_bias;
+			msg.abs_pressure = air_data.baro_pressure_pa;
 			msg.diff_pressure = differential_pressure.differential_pressure_raw_pa;
-			msg.pressure_alt = sensor.baro_alt_meter;
-			msg.temperature = sensor.baro_temp_celcius;
+			msg.pressure_alt = air_data.baro_alt_meter;
+			msg.temperature = air_data.baro_temp_celcius;
 			msg.fields_updated = fields_updated;
 
 			mavlink_msg_highres_imu_send_struct(_mavlink->get_channel(), &msg);
@@ -1007,8 +1020,7 @@ private:
 	MavlinkOrbSubscription *_airspeed_sub;
 	uint64_t _airspeed_time;
 
-	MavlinkOrbSubscription *_sensor_sub;
-	uint64_t _sensor_time;
+	MavlinkOrbSubscription *_air_data_sub;
 
 	/* do not allow top copying this class */
 	MavlinkStreamVFRHUD(MavlinkStreamVFRHUD &);
@@ -1026,7 +1038,7 @@ protected:
 		_act1_sub(_mavlink->add_orb_subscription(ORB_ID(actuator_controls_1))),
 		_airspeed_sub(_mavlink->add_orb_subscription(ORB_ID(airspeed))),
 		_airspeed_time(0),
-		_sensor_sub(_mavlink->add_orb_subscription(ORB_ID(sensor_combined)))
+		_air_data_sub(_mavlink->add_orb_subscription(ORB_ID(vehicle_air_data)))
 	{}
 
 	bool send(const hrt_abstime t)
@@ -1074,12 +1086,12 @@ protected:
 				msg.alt = -pos.z + pos.ref_alt;
 
 			} else {
-				sensor_combined_s sensor = {};
-				_sensor_sub->update(&sensor);
+				vehicle_air_data_s air_data = {};
+				_air_data_sub->update(&air_data);
 
 				/* fall back to baro altitude */
-				if (sensor.timestamp > 0) {
-					msg.alt = sensor.baro_alt_meter;
+				if (air_data.timestamp > 0) {
+					msg.alt = air_data.baro_alt_meter;
 				}
 			}
 
@@ -1696,7 +1708,7 @@ private:
 	uint64_t _lpos_time;
 
 	MavlinkOrbSubscription *_home_sub;
-	MavlinkOrbSubscription *_sensor_sub;
+	MavlinkOrbSubscription *_air_data_sub;
 
 	/* do not allow top copying this class */
 	MavlinkStreamGlobalPositionInt(MavlinkStreamGlobalPositionInt &);
@@ -1709,7 +1721,7 @@ protected:
 		_lpos_sub(_mavlink->add_orb_subscription(ORB_ID(vehicle_local_position))),
 		_lpos_time(0),
 		_home_sub(_mavlink->add_orb_subscription(ORB_ID(home_position))),
-		_sensor_sub(_mavlink->add_orb_subscription(ORB_ID(sensor_combined)))
+		_air_data_sub(_mavlink->add_orb_subscription(ORB_ID(vehicle_air_data)))
 	{}
 
 	bool send(const hrt_abstime t)
@@ -1728,11 +1740,11 @@ protected:
 
 			} else {
 				// fall back to baro altitude
-				sensor_combined_s sensor = {};
-				_sensor_sub->update(&sensor);
+				vehicle_air_data_s air_data = {};
+				_air_data_sub->update(&air_data);
 
-				if (sensor.timestamp > 0) {
-					msg.alt = sensor.baro_alt_meter * 1000.0f;
+				if (air_data.timestamp > 0) {
+					msg.alt = air_data.baro_alt_meter * 1000.0f;
 				}
 			}
 
@@ -3692,7 +3704,7 @@ public:
 private:
 	MavlinkOrbSubscription *_local_pos_sub;
 	MavlinkOrbSubscription *_home_sub;
-	MavlinkOrbSubscription *_sensor_sub;
+	MavlinkOrbSubscription *_air_data_sub;
 
 	uint64_t _local_pos_time{0};
 
@@ -3704,7 +3716,7 @@ protected:
 	explicit MavlinkStreamAltitude(Mavlink *mavlink) : MavlinkStream(mavlink),
 		_local_pos_sub(_mavlink->add_orb_subscription(ORB_ID(vehicle_local_position))),
 		_home_sub(_mavlink->add_orb_subscription(ORB_ID(home_position))),
-		_sensor_sub(_mavlink->add_orb_subscription(ORB_ID(sensor_combined)))
+		_air_data_sub(_mavlink->add_orb_subscription(ORB_ID(vehicle_air_data)))
 	{}
 
 	bool send(const hrt_abstime t)
@@ -3719,14 +3731,14 @@ protected:
 		msg.bottom_clearance = NAN;
 
 		// always update monotonic altitude
-		bool sensor_updated = false;
-		sensor_combined_s sensor = {};
-		_sensor_sub->update(&sensor);
+		bool air_data_updated = false;
+		vehicle_air_data_s air_data = {};
+		_air_data_sub->update(&air_data);
 
-		if (sensor.timestamp > 0) {
-			msg.altitude_monotonic = sensor.baro_alt_meter;
+		if (air_data.timestamp > 0) {
+			msg.altitude_monotonic = air_data.baro_alt_meter;
 
-			sensor_updated = true;
+			air_data_updated = true;
 		}
 
 		bool lpos_updated = false;
@@ -3768,7 +3780,7 @@ protected:
 		// avoid publishing only baro altitude_monotonic if possible
 		bool lpos_timeout = (hrt_elapsed_time(&_local_pos_time) > 10000);
 
-		if (lpos_updated || (sensor_updated && lpos_timeout)) {
+		if (lpos_updated || (air_data_updated && lpos_timeout)) {
 			msg.time_usec = hrt_absolute_time();
 			mavlink_msg_altitude_send_struct(_mavlink->get_channel(), &msg);
 
@@ -3997,8 +4009,8 @@ private:
 	MavlinkOrbSubscription *_mission_result_sub;
 	uint64_t _mission_result_time;
 
-	MavlinkOrbSubscription *_sensor_sub;
-	uint64_t _sensor_time;
+	MavlinkOrbSubscription *_air_data_sub;
+	uint64_t _air_data_time;
 
 	MavlinkOrbSubscription *_status_sub;
 	uint64_t _status_time;
@@ -4037,8 +4049,8 @@ protected:
 		_landed_time(0),
 		_mission_result_sub(_mavlink->add_orb_subscription(ORB_ID(mission_result))),
 		_mission_result_time(0),
-		_sensor_sub(_mavlink->add_orb_subscription(ORB_ID(sensor_combined))),
-		_sensor_time(0),
+		_air_data_sub(_mavlink->add_orb_subscription(ORB_ID(vehicle_air_data))),
+		_air_data_time(0),
 		_status_sub(_mavlink->add_orb_subscription(ORB_ID(vehicle_status))),
 		_status_time(0),
 		_tecs_status_sub(_mavlink->add_orb_subscription(ORB_ID(tecs_status))),
@@ -4053,8 +4065,8 @@ protected:
 		fw_pos_ctrl_status_s fw_pos_ctrl_status = {};
 		home_position_s home = {};
 		mission_result_s mission_result = {};
-		sensor_combined_s sensor = {};
 		tecs_status_s tecs_status = {};
+		vehicle_air_data_s air_data = {};
 		vehicle_attitude_s attitude = {};
 		vehicle_attitude_setpoint_s attitude_sp = {};
 		vehicle_global_position_s global_pos = {};
@@ -4074,7 +4086,7 @@ protected:
 		updated |= _home_sub->update(&_home_time, &home);
 		updated |= _landed_sub->update(&_landed_time, &land_detected);
 		updated |= _mission_result_sub->update(&_mission_result_time, &mission_result);
-		updated |= _sensor_sub->update(&_sensor_time, &sensor);
+		updated |= _air_data_sub->update(&_air_data_time, &air_data);
 		updated |= _tecs_status_sub->update(&_tecs_time, &tecs_status);
 
 		if (updated) {
@@ -4124,7 +4136,7 @@ protected:
 
 			msg.battery_remaining = (battery.connected) ? battery.remaining * 100.0f : -1;
 
-			msg.temperature = sensor.baro_temp_celcius;
+			msg.temperature = air_data.baro_temp_celcius;
 			msg.temperature_air = airspeed.air_temperature_celsius;
 
 			msg.wp_num = mission_result.seq_current;
