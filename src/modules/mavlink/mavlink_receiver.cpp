@@ -98,6 +98,7 @@ MavlinkReceiver::MavlinkReceiver(Mavlink *parent) :
 	_parameters_manager(parent),
 	_mavlink_ftp(parent),
 	_mavlink_log_handler(parent),
+	_mavlink_timesync(parent),
 	_status{},
 	_hil_local_pos{},
 	_hil_land_detector{},
@@ -2514,6 +2515,9 @@ MavlinkReceiver::receive_thread(void *arg)
 
 						/* handle packet with log component */
 						_mavlink_log_handler.handle_message(&msg);
+
+						/* handle packet with timesync component */
+						_mavlink_timesync.handle_message(&msg);
 
 						/* handle packet with parent object */
 						_mavlink->handle_message(&msg);
