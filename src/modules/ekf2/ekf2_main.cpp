@@ -111,6 +111,8 @@ private:
 
 	const Vector3f get_vel_body_wind();
 
+	bool update_landing_target_pose();
+
 	bool 	_replay_mode = false;			///< true when we use replay data from a log
 
 	// time slip monitoring
@@ -175,6 +177,8 @@ private:
 
 	uORB::Publication<vehicle_local_position_s> _vehicle_local_position_pub;
 	uORB::Publication<vehicle_global_position_s> _vehicle_global_position_pub;
+
+	int _landing_target_pose_sub{-1};
 
 	Ekf _ekf;
 
@@ -522,7 +526,7 @@ void Ekf2::run()
 	int status_sub = orb_subscribe(ORB_ID(vehicle_status));
 	int sensor_selection_sub = orb_subscribe(ORB_ID(sensor_selection));
 	int sensor_baro_sub = orb_subscribe(ORB_ID(sensor_baro));
-	int landing_target_pose_sub = orb_subscribe(ORB_ID(landing_target_pose));
+	_landing_target_pose_sub = orb_subscribe(ORB_ID(landing_target_pose));
 
 	bool imu_bias_reset_request = false;
 
@@ -556,7 +560,6 @@ void Ekf2::run()
 	sensor_selection_s sensor_selection = {};
 	sensor_baro_s sensor_baro = {};
 	sensor_baro.pressure = 1013.5f; // initialise pressure to sea level
-	landing_target_pose_s landing_target_pose = {};
 
 	while (!should_exit()) {
 		int ret = px4_poll(fds, sizeof(fds) / sizeof(fds[0]), 1000);
@@ -596,7 +599,6 @@ void Ekf2::run()
 		bool vision_position_updated = false;
 		bool vision_attitude_updated = false;
 		bool vehicle_status_updated = false;
-		bool landing_target_pose_updated = false;
 
 		orb_copy(ORB_ID(sensor_combined), sensors_sub, &sensors);
 		// update all other topics if they have new data
@@ -937,24 +939,8 @@ void Ekf2::run()
 			_ekf.set_in_air_status(!vehicle_land_detected.landed);
 		}
 
-		// use the landing target pose estimate as another source of velocity data
-		orb_check(landing_target_pose_sub, &landing_target_pose_updated);
 
-		if (landing_target_pose_updated) {
-			orb_copy(ORB_ID(landing_target_pose), landing_target_pose_sub, &landing_target_pose);
-
-			// we can only use the landing target if it has a fixed position and  a valid velocity estimate
-			if (landing_target_pose.is_static && landing_target_pose.rel_vel_valid) {
-				// velocity of vehicle relative to target has opposite sign to target relative to vehicle
-				float velocity[2];
-				velocity[0] = -landing_target_pose.vx_rel;
-				velocity[1] = -landing_target_pose.vy_rel;
-				float variance[2];
-				variance[0] = landing_target_pose.cov_vx_rel;
-				variance[1] = landing_target_pose.cov_vy_rel;
-				_ekf.setAuxVelData(landing_target_pose.timestamp, velocity, variance);
-			}
-		}
+		update_landing_target_pose();
 
 		// run the EKF update and output
 		const bool updated = _ekf.update();
@@ -1455,7 +1441,7 @@ void Ekf2::run()
 	orb_unsubscribe(status_sub);
 	orb_unsubscribe(sensor_selection_sub);
 	orb_unsubscribe(sensor_baro_sub);
-	orb_unsubscribe(landing_target_pose_sub);
+	orb_unsubscribe(_landing_target_pose_sub);
 
 	for (unsigned i = 0; i < ORB_MULTI_MAX_INSTANCES; i++) {
 		orb_unsubscribe(range_finder_subs[i]);
@@ -1535,6 +1521,32 @@ const Vector3f Ekf2::get_vel_body_wind()
 	Vector3f v_wind_comp = {velocity[0] - velNE_wind[0], velocity[1] - velNE_wind[1], velocity[2]};
 
 	return R_to_body * v_wind_comp;
+}
+
+bool Ekf2::update_landing_target_pose()
+{
+	// use the landing target pose estimate as another source of velocity data
+	bool landing_target_pose_updated = false;
+	orb_check(_landing_target_pose_sub, &landing_target_pose_updated);
+
+	if (landing_target_pose_updated) {
+		landing_target_pose_s landing_target_pose;
+		orb_copy(ORB_ID(landing_target_pose), _landing_target_pose_sub, &landing_target_pose);
+
+		// we can only use the landing target if it has a fixed position and  a valid velocity estimate
+		if (landing_target_pose.is_static && landing_target_pose.rel_vel_valid) {
+			// velocity of vehicle relative to target has opposite sign to target relative to vehicle
+			float velocity[2];
+			velocity[0] = -landing_target_pose.vx_rel;
+			velocity[1] = -landing_target_pose.vy_rel;
+			float variance[2];
+			variance[0] = landing_target_pose.cov_vx_rel;
+			variance[1] = landing_target_pose.cov_vy_rel;
+			_ekf.setAuxVelData(landing_target_pose.timestamp, velocity, variance);
+		}
+	}
+
+	return landing_target_pose_updated;
 }
 
 Ekf2 *Ekf2::instantiate(int argc, char *argv[])
