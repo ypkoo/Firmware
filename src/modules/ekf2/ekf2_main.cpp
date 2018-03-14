@@ -111,6 +111,7 @@ private:
 
 	const Vector3f get_vel_body_wind();
 
+	bool update_vehicle_land_detected();
 	bool update_landing_target_pose();
 
 	bool 	_replay_mode = false;			///< true when we use replay data from a log
@@ -179,6 +180,9 @@ private:
 	uORB::Publication<vehicle_global_position_s> _vehicle_global_position_pub;
 
 	int _landing_target_pose_sub{-1};
+	int _vehicle_land_detected_sub{-1};
+
+	bool _landed{true};
 
 	Ekf _ekf;
 
@@ -522,11 +526,12 @@ void Ekf2::run()
 	int optical_flow_sub = orb_subscribe(ORB_ID(optical_flow));
 	int ev_pos_sub = orb_subscribe(ORB_ID(vehicle_vision_position));
 	int ev_att_sub = orb_subscribe(ORB_ID(vehicle_vision_attitude));
-	int vehicle_land_detected_sub = orb_subscribe(ORB_ID(vehicle_land_detected));
 	int status_sub = orb_subscribe(ORB_ID(vehicle_status));
 	int sensor_selection_sub = orb_subscribe(ORB_ID(sensor_selection));
 	int sensor_baro_sub = orb_subscribe(ORB_ID(sensor_baro));
+
 	_landing_target_pose_sub = orb_subscribe(ORB_ID(landing_target_pose));
+	_vehicle_land_detected_sub = orb_subscribe(ORB_ID(vehicle_land_detected));
 
 	bool imu_bias_reset_request = false;
 
@@ -553,7 +558,6 @@ void Ekf2::run()
 	airspeed_s airspeed = {};
 	optical_flow_s optical_flow = {};
 	distance_sensor_s range_finder = {};
-	vehicle_land_detected_s vehicle_land_detected = {};
 	vehicle_local_position_s ev_pos = {};
 	vehicle_attitude_s ev_att = {};
 	vehicle_status_s vehicle_status = {};
@@ -595,7 +599,6 @@ void Ekf2::run()
 		bool sensor_selection_updated = false;
 		bool optical_flow_updated = false;
 		bool range_finder_updated = false;
-		bool vehicle_land_detected_updated = false;
 		bool vision_position_updated = false;
 		bool vision_attitude_updated = false;
 		bool vehicle_status_updated = false;
@@ -932,14 +935,7 @@ void Ekf2::run()
 			}
 		}
 
-		orb_check(vehicle_land_detected_sub, &vehicle_land_detected_updated);
-
-		if (vehicle_land_detected_updated) {
-			orb_copy(ORB_ID(vehicle_land_detected), vehicle_land_detected_sub, &vehicle_land_detected);
-			_ekf.set_in_air_status(!vehicle_land_detected.landed);
-		}
-
-
+		update_vehicle_land_detected();
 		update_landing_target_pose();
 
 		// run the EKF update and output
@@ -1193,7 +1189,7 @@ void Ekf2::run()
 				/* Check and save learned magnetometer bias estimates */
 
 				// Check if conditions are OK to for learning of magnetometer bias values
-				if (!vehicle_land_detected.landed && // not on ground
+				if (!_landed && // not on ground
 				    (vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED) && // vehicle is armed
 				    (status.filter_fault_flags == 0) && // there are no filter faults
 				    (status.control_mode_flags & (1 << 5))) { // the EKF is operating in the correct mode
@@ -1437,10 +1433,11 @@ void Ekf2::run()
 	orb_unsubscribe(optical_flow_sub);
 	orb_unsubscribe(ev_pos_sub);
 	orb_unsubscribe(ev_att_sub);
-	orb_unsubscribe(vehicle_land_detected_sub);
 	orb_unsubscribe(status_sub);
 	orb_unsubscribe(sensor_selection_sub);
 	orb_unsubscribe(sensor_baro_sub);
+
+	orb_unsubscribe(_vehicle_land_detected_sub);
 	orb_unsubscribe(_landing_target_pose_sub);
 
 	for (unsigned i = 0; i < ORB_MULTI_MAX_INSTANCES; i++) {
@@ -1521,6 +1518,23 @@ const Vector3f Ekf2::get_vel_body_wind()
 	Vector3f v_wind_comp = {velocity[0] - velNE_wind[0], velocity[1] - velNE_wind[1], velocity[2]};
 
 	return R_to_body * v_wind_comp;
+}
+
+bool Ekf2::update_vehicle_land_detected()
+{
+	bool vehicle_land_detected_updated = false;
+	orb_check(_vehicle_land_detected_sub, &vehicle_land_detected_updated);
+
+	if (vehicle_land_detected_updated) {
+		vehicle_land_detected_s vehicle_land_detected;
+
+		if (orb_copy(ORB_ID(vehicle_land_detected), _vehicle_land_detected_sub, &vehicle_land_detected) == PX4_OK) {
+			_ekf.set_in_air_status(!vehicle_land_detected.landed);
+			_landed = vehicle_land_detected.landed;
+		}
+	}
+
+	return vehicle_land_detected_updated;
 }
 
 bool Ekf2::update_landing_target_pose()
