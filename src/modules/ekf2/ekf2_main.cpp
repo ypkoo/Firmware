@@ -113,6 +113,7 @@ private:
 
 	bool update_vehicle_land_detected();
 	bool update_landing_target_pose();
+	bool update_vehicle_status();
 
 	bool 	_replay_mode = false;			///< true when we use replay data from a log
 
@@ -181,8 +182,11 @@ private:
 
 	int _landing_target_pose_sub{-1};
 	int _vehicle_land_detected_sub{-1};
+	int _vehicle_status_sub{-1};
 
 	bool _landed{true};
+
+	uint8_t _arming_state{vehicle_status_s::ARMING_STATE_INIT};
 
 	Ekf _ekf;
 
@@ -526,12 +530,12 @@ void Ekf2::run()
 	int optical_flow_sub = orb_subscribe(ORB_ID(optical_flow));
 	int ev_pos_sub = orb_subscribe(ORB_ID(vehicle_vision_position));
 	int ev_att_sub = orb_subscribe(ORB_ID(vehicle_vision_attitude));
-	int status_sub = orb_subscribe(ORB_ID(vehicle_status));
 	int sensor_selection_sub = orb_subscribe(ORB_ID(sensor_selection));
 	int sensor_baro_sub = orb_subscribe(ORB_ID(sensor_baro));
 
 	_landing_target_pose_sub = orb_subscribe(ORB_ID(landing_target_pose));
 	_vehicle_land_detected_sub = orb_subscribe(ORB_ID(vehicle_land_detected));
+	_vehicle_status_sub = orb_subscribe(ORB_ID(vehicle_status));
 
 	bool imu_bias_reset_request = false;
 
@@ -560,7 +564,6 @@ void Ekf2::run()
 	distance_sensor_s range_finder = {};
 	vehicle_local_position_s ev_pos = {};
 	vehicle_attitude_s ev_att = {};
-	vehicle_status_s vehicle_status = {};
 	sensor_selection_s sensor_selection = {};
 	sensor_baro_s sensor_baro = {};
 	sensor_baro.pressure = 1013.5f; // initialise pressure to sea level
@@ -601,16 +604,9 @@ void Ekf2::run()
 		bool range_finder_updated = false;
 		bool vision_position_updated = false;
 		bool vision_attitude_updated = false;
-		bool vehicle_status_updated = false;
 
 		orb_copy(ORB_ID(sensor_combined), sensors_sub, &sensors);
 		// update all other topics if they have new data
-
-		orb_check(status_sub, &vehicle_status_updated);
-
-		if (vehicle_status_updated) {
-			orb_copy(ORB_ID(vehicle_status), status_sub, &vehicle_status);
-		}
 
 		orb_check(gps_sub, &gps_updated);
 
@@ -746,7 +742,7 @@ void Ekf2::run()
 					}
 				}
 
-				if ((vehicle_status.arming_state != vehicle_status_s::ARMING_STATE_ARMED) && (_invalid_mag_id_count > 100)) {
+				if ((_arming_state != vehicle_status_s::ARMING_STATE_ARMED) && (_invalid_mag_id_count > 100)) {
 					// the sensor ID used for the last saved mag bias is not confirmed to be the same as the current sensor ID
 					// this means we need to reset the learned bias values to zero
 					_mag_bias_x.set(0.f);
@@ -876,7 +872,7 @@ void Ekf2::run()
 		}
 
 		// only set airspeed data if condition for airspeed fusion are met
-		bool fuse_airspeed = airspeed_updated && !vehicle_status.is_rotary_wing
+		bool fuse_airspeed = airspeed_updated
 				     && (_arspFusionThreshold.get() > FLT_EPSILON)
 				     && (airspeed.true_airspeed_m_s > _arspFusionThreshold.get());
 
@@ -885,14 +881,7 @@ void Ekf2::run()
 			_ekf.setAirspeedData(airspeed.timestamp, airspeed.true_airspeed_m_s, eas2tas);
 		}
 
-		if (vehicle_status_updated) {
-			// only fuse synthetic sideslip measurements if conditions are met
-			bool fuse_beta = !vehicle_status.is_rotary_wing && (_fuseBeta.get() == 1);
-			_ekf.set_fuse_beta_flag(fuse_beta);
-
-			// let the EKF know if the vehicle motion is that of a fixed wing (forward flight only relative to wind)
-			_ekf.set_is_fixed_wing(!vehicle_status.is_rotary_wing);
-		}
+		update_vehicle_status();
 
 		if (optical_flow_updated) {
 			flow_message flow;
@@ -1190,7 +1179,7 @@ void Ekf2::run()
 
 				// Check if conditions are OK to for learning of magnetometer bias values
 				if (!_landed && // not on ground
-				    (vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED) && // vehicle is armed
+				    (_arming_state == vehicle_status_s::ARMING_STATE_ARMED) && // vehicle is armed
 				    (status.filter_fault_flags == 0) && // there are no filter faults
 				    (status.control_mode_flags & (1 << 5))) { // the EKF is operating in the correct mode
 
@@ -1240,7 +1229,7 @@ void Ekf2::run()
 				}
 
 				// Check and save the last valid calibration when we are disarmed
-				if ((vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_STANDBY)
+				if ((_arming_state == vehicle_status_s::ARMING_STATE_STANDBY)
 				    && (status.filter_fault_flags == 0)
 				    && (sensor_selection.mag_device_id == _mag_bias_id.get())) {
 
@@ -1281,7 +1270,7 @@ void Ekf2::run()
 				_ekf.get_output_tracking_error(&innovations.output_tracking_error[0]);
 
 				// calculate noise filtered velocity innovations which are used for pre-flight checking
-				if (vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_STANDBY) {
+				if (_arming_state == vehicle_status_s::ARMING_STATE_STANDBY) {
 					// calculate coefficients for LPF applied to innovation sequences
 					float alpha = constrain(sensors.accelerometer_integral_dt / 1.e6f * _innov_lpf_tau_inv, 0.0f, 1.0f);
 					float beta = 1.0f - alpha;
@@ -1433,12 +1422,13 @@ void Ekf2::run()
 	orb_unsubscribe(optical_flow_sub);
 	orb_unsubscribe(ev_pos_sub);
 	orb_unsubscribe(ev_att_sub);
-	orb_unsubscribe(status_sub);
 	orb_unsubscribe(sensor_selection_sub);
 	orb_unsubscribe(sensor_baro_sub);
 
-	orb_unsubscribe(_vehicle_land_detected_sub);
 	orb_unsubscribe(_landing_target_pose_sub);
+	orb_unsubscribe(_vehicle_land_detected_sub);
+	orb_unsubscribe(_vehicle_status_sub);
+
 
 	for (unsigned i = 0; i < ORB_MULTI_MAX_INSTANCES; i++) {
 		orb_unsubscribe(range_finder_subs[i]);
@@ -1561,6 +1551,28 @@ bool Ekf2::update_landing_target_pose()
 	}
 
 	return landing_target_pose_updated;
+}
+
+bool Ekf2::update_vehicle_status()
+{
+	bool vehicle_status_updated = false;
+	orb_check(_vehicle_status_sub, &vehicle_status_updated);
+
+	if (vehicle_status_updated) {
+		vehicle_status_s vehicle_status;
+		orb_copy(ORB_ID(vehicle_status), _vehicle_status_sub, &vehicle_status);
+
+		// only fuse synthetic sideslip measurements if conditions are met
+		bool fuse_beta = !vehicle_status.is_rotary_wing && (_fuseBeta.get() == 1);
+		_ekf.set_fuse_beta_flag(fuse_beta);
+
+		// let the EKF know if the vehicle motion is that of a fixed wing (forward flight only relative to wind)
+		_ekf.set_is_fixed_wing(!vehicle_status.is_rotary_wing);
+
+		_arming_state = vehicle_status.arming_state;
+	}
+
+	return vehicle_status_updated;
 }
 
 Ekf2 *Ekf2::instantiate(int argc, char *argv[])
