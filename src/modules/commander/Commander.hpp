@@ -109,8 +109,8 @@ private:
 
 
 	static constexpr int64_t sec_to_usec = (1000 * 1000);
-	static constexpr int64_t POSVEL_PROBATION_MIN = 1 * sec_to_usec;	/**< minimum probation duration (usec) */
-	static constexpr int64_t POSVEL_PROBATION_MAX = 100 * sec_to_usec;	/**< maximum probation duration (usec) */
+	const int64_t POSVEL_PROBATION_MIN = 1 * sec_to_usec;	/**< minimum probation duration (usec) */
+	const int64_t POSVEL_PROBATION_MAX = 100 * sec_to_usec;	/**< maximum probation duration (usec) */
 
 	hrt_abstime	_last_gpos_fail_time_us{0};	/**< Last time that the global position validity recovery check failed (usec) */
 	hrt_abstime	_last_lpos_fail_time_us{0};	/**< Last time that the local position validity recovery check failed (usec) */
@@ -121,23 +121,10 @@ private:
 	hrt_abstime	_lpos_probation_time_us = POSVEL_PROBATION_MIN;
 	hrt_abstime	_lvel_probation_time_us = POSVEL_PROBATION_MIN;
 
-	hrt_abstime	get_posctl_nav_loss_delay() { return constrain(_failsafe_pos_delay.get() * sec_to_usec, POSVEL_PROBATION_MIN, POSVEL_PROBATION_MAX); }
-	hrt_abstime	get_posctl_nav_loss_prob() { return constrain(_failsafe_pos_probation.get() * sec_to_usec, POSVEL_PROBATION_MIN, POSVEL_PROBATION_MAX); }
-
-
 	bool handle_command(vehicle_status_s *status_local, const vehicle_command_s &cmd,
 			    actuator_armed_s *armed_local, home_position_s *home, orb_advert_t *home_pub, orb_advert_t *command_ack_pub, bool *changed);
 
 	bool set_home_position(orb_advert_t &homePub, home_position_s &home, bool set_alt_only_to_lpos_ref);
-
-	// Set the main system state based on RC and override device inputs
-	transition_result_t set_main_state(const vehicle_status_s &status, bool *changed);
-
-	// Enable override (manual reversion mode) on the system
-	transition_result_t set_main_state_override_on(const vehicle_status_s &status_local, bool *changed);
-
-	// Set the system main state based on the current RC inputs
-	transition_result_t set_main_state_rc(const vehicle_status_s &status_local, bool *changed);
 
 	// Set the main system state based on RC and override device inputs
 	transition_result_t set_main_state(vehicle_status_s *status, bool *changed);

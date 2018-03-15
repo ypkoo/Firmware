@@ -1879,7 +1879,7 @@ Commander::run()
 			check_posvel_validity(local_position.v_xy_valid, local_position.evh, _evh_threshold.get(), local_position.timestamp, &_last_lvel_fail_time_us, &_lvel_probation_time_us, &status_flags.condition_local_velocity_valid, &status_changed);
 		}
 
-		check_valid(_local_position_sub.get().timestamp, get_posctl_nav_loss_delay(), _local_position_sub.get().z_valid, &(status_flags.condition_local_altitude_valid), &status_changed);
+		check_valid(_local_position_sub.get().timestamp, _failsafe_pos_delay.get() * sec_to_usec, _local_position_sub.get().z_valid, &(status_flags.condition_local_altitude_valid), &status_changed);
 
 		/* Update land detector */
 		orb_check(land_detector_sub, &updated);
@@ -1898,9 +1898,9 @@ Commander::run()
 						// Set all position and velocity test probation durations to takeoff value
 						// This is a larger value to give the vehicle time to complete a failsafe landing
 						// if faulty sensors cause loss of navigation shortly after takeoff.
-						_gpos_probation_time_us = get_posctl_nav_loss_prob();
-						_lpos_probation_time_us = get_posctl_nav_loss_prob();
-						_lvel_probation_time_us = get_posctl_nav_loss_prob();
+						_gpos_probation_time_us = _failsafe_pos_probation.get() * sec_to_usec;
+						_lpos_probation_time_us = _failsafe_pos_probation.get() * sec_to_usec;
+						_lvel_probation_time_us = _failsafe_pos_probation.get() * sec_to_usec;
 					}
 				}
 
@@ -3435,7 +3435,7 @@ Commander::check_posvel_validity(const bool data_valid, const float data_accurac
 		*probation_time_us = POSVEL_PROBATION_MIN;
 	}
 
-	const bool data_stale = (hrt_elapsed_time(&data_timestamp_us) > get_posctl_nav_loss_delay());
+	const bool data_stale = (hrt_elapsed_time(&data_timestamp_us) > _failsafe_pos_delay.get() * sec_to_usec);
 	const float req_accuracy = (was_valid ? required_accuracy * 2.5f : required_accuracy);
 
 	const bool level_check_pass = data_valid && !data_stale && (data_accuracy < req_accuracy);
