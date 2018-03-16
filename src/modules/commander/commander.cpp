@@ -3438,7 +3438,7 @@ Commander::check_posvel_validity(const bool data_valid, const float data_accurac
 		*probation_time_us = POSVEL_PROBATION_MIN;
 	}
 
-	const bool data_stale = (hrt_elapsed_time(&data_timestamp_us) > _failsafe_pos_delay.get() * sec_to_usec);
+	const bool data_stale = ((hrt_elapsed_time(&data_timestamp_us) > _failsafe_pos_delay.get() * sec_to_usec) || (data_timestamp_us == 0));
 	const float req_accuracy = (was_valid ? required_accuracy * 2.5f : required_accuracy);
 
 	const bool level_check_pass = data_valid && !data_stale && (data_accuracy < req_accuracy);
