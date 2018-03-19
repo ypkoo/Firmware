@@ -308,13 +308,19 @@ private:
 
 	static constexpr uint16_t msg_id_invalid = 0xffff;
 
-	uint16_t _sensors_combined_msg_id = msg_id_invalid;
-	uint16_t _gps_msg_id = msg_id_invalid;
-	uint16_t _optical_flow_msg_id = msg_id_invalid;
-	uint16_t _distance_sensor_msg_id = msg_id_invalid;
 	uint16_t _airspeed_msg_id = msg_id_invalid;
-	uint16_t _vehicle_vision_position_msg_id = msg_id_invalid;
+	uint16_t _distance_sensor_msg_id = msg_id_invalid;
+	uint16_t _gps_msg_id = msg_id_invalid;
+	uint16_t _landing_target_pose_msg_id = msg_id_invalid;
+	uint16_t _optical_flow_msg_id = msg_id_invalid;
+	uint16_t _sensor_combined_msg_id = msg_id_invalid;
+	uint16_t _sensor_selection_msg_id = msg_id_invalid;
+	uint16_t _vehicle_air_data_msg_id = msg_id_invalid;
+	uint16_t _vehicle_land_detected_msg_id = msg_id_invalid;
+	uint16_t _vehicle_magnetometer_msg_id = msg_id_invalid;
+	uint16_t _vehicle_status_msg_id = msg_id_invalid;
 	uint16_t _vehicle_vision_attitude_msg_id = msg_id_invalid;
+	uint16_t _vehicle_vision_position_msg_id = msg_id_invalid;
 
 	int _topic_counter = 0;
 };
