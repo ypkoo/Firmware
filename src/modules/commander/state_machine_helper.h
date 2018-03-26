@@ -79,17 +79,16 @@ extern const char *const arming_state_names[];
 
 bool is_safe(const struct safety_s *safety, const struct actuator_armed_s *armed);
 
-transition_result_t arming_state_transition(struct vehicle_status_s *status,
-					    struct battery_status_s *battery,
-					    const struct safety_s *safety,
-					    arming_state_t new_arming_state,
-					    struct actuator_armed_s *armed,
-					    bool fRunPreArmChecks,
-					    orb_advert_t *mavlink_log_pub,        ///< uORB handle for mavlink log
-					    vehicle_status_flags_s *status_flags,
-					    float avionics_power_rail_voltage,
-					    uint8_t arm_requirements,
-					    hrt_abstime time_since_boot);
+transition_result_t arming_state_transition(vehicle_status_s* status,
+                                            const battery_status_s& battery,
+                                            const safety_s& safety,
+                                            arming_state_t new_arming_state,
+                                            actuator_armed_s *armed,
+                                            orb_advert_t *mavlink_log_pub,	///< uORB handle for mavlink log
+                                            vehicle_status_flags_s *status_flags,
+                                            const float avionics_power_rail_voltage,
+                                            const uint8_t arm_requirements,
+                                            const hrt_abstime& time_since_boot);
 
 transition_result_t
 main_state_transition(struct vehicle_status_s *status, main_state_t new_main_state, uint8_t &main_state_prev,
@@ -131,8 +130,6 @@ void set_rc_loss_nav_state(vehicle_status_s *status, actuator_armed_s *armed, ve
 void set_data_link_loss_nav_state(vehicle_status_s *status, actuator_armed_s *armed, vehicle_status_flags_s *status_flags,
 						commander_state_s *internal_state, const link_loss_actions_t link_loss_act);
 
-int prearm_check(struct vehicle_status_s *status, orb_advert_t *mavlink_log_pub, bool prearm,
-		    bool force_report, vehicle_status_flags_s *status_flags, battery_status_s *battery,
-		    uint8_t arm_requirements, hrt_abstime time_since_boot);
+bool prearm_check(orb_advert_t *mavlink_log_pub, const vehicle_status_flags_s& status_flags, const battery_status_s& battery, const uint8_t arm_requirements);
 
 #endif /* STATE_MACHINE_HELPER_H_ */
