@@ -228,27 +228,36 @@ pipeline {
             }
           }
 
-
           // GCC7 posix
-          for (def option in ["sitl_default"]) {
-            def node_name = "${option}"
-
-            builds["${node_name} (GCC7)"] = {
-              node {
-                stage("Build Test ${node_name} (GCC7)") {
-                  docker.image('px4io/px4-dev-base-archlinux:2017-12-30').inside('-e CCACHE_BASEDIR=$WORKSPACE -v ${CCACHE_DIR}:${CCACHE_DIR}:rw') {
-                    stage("${node_name}") {
-                      checkout scm
-                      sh "export"
-                      sh "make distclean"
-                      sh "ccache -z"
-                      sh "make posix_${node_name}"
-                      sh "ccache -s"
-                    }
+          builds["posix_sitl_default (GCC7)"] = {
+            node {
+              stage("Build Test posix_sitl_default (GCC7)") {
+                docker.image('px4io/px4-dev-base-archlinux:2017-12-30').inside('-e CCACHE_BASEDIR=$WORKSPACE -v ${CCACHE_DIR}:${CCACHE_DIR}:rw') {
+                  stage("posix_sitl_default (GCC7)") {
+                    checkout scm
+                    sh "export"
+                    sh "make distclean"
+                    sh "ccache -z"
+                    sh "make posix_sitl_default"
+                    sh "ccache -s"
                   }
                 }
               }
             }
+          }
+
+          // MAC OS posix_sitl_default
+          builds["posix_sitl_default (OSX)"] = {
+            node('mac') {
+              stage("posix_sitl_default (OSX)") {
+                checkout scm
+                sh "export"
+                sh "make distclean"
+                sh "ccache -z"
+                sh "make posix_sitl_default"
+                sh "ccache -s"
+              }
+            } // node
           }
 
           parallel builds
