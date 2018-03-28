@@ -51,6 +51,7 @@
 #include <lib/ecl/geo/geo.h>
 #include <string.h>
 #include <mathlib/mathlib.h>
+#include <matrix/math.hpp>
 
 #include <uORB/topics/vehicle_command.h>
 #include <uORB/topics/sensor_combined.h>
@@ -270,12 +271,10 @@ int run_lm_sphere_fit(const float x[], const float y[], const float z[], float &
 	float fitness = _fitness;
 	float fit1 = 0.0f, fit2 = 0.0f;
 
-	float JTJ[16];
-	float JTJ2[16];
+	matrix::SquareMatrix<float, 4> JTJ;
+	matrix::SquareMatrix<float, 4> JTJ2;
 	float JTFI[4];
 	float residual = 0.0f;
-	memset(JTJ, 0, sizeof(JTJ));
-	memset(JTJ2, 0, sizeof(JTJ2));
 	memset(JTFI, 0, sizeof(JTFI));
 
 	// Gauss Newton Part common for all kind of extensions including LM
@@ -299,8 +298,8 @@ int run_lm_sphere_fit(const float x[], const float y[], const float z[], float &
 		for (uint8_t i = 0; i < 4; i++) {
 			// compute JTJ
 			for (uint8_t j = 0; j < 4; j++) {
-				JTJ[i * 4 + j] += sphere_jacob[i] * sphere_jacob[j];
-				JTJ2[i * 4 + j] += sphere_jacob[i] * sphere_jacob[j]; //a backup JTJ for LM
+				JTJ(i, j) += sphere_jacob[i] * sphere_jacob[j];
+				JTJ2(i, j) += sphere_jacob[i] * sphere_jacob[j]; //a backup JTJ for LM
 			}
 
 			JTFI[i] += sphere_jacob[i] * residual;
@@ -315,22 +314,22 @@ int run_lm_sphere_fit(const float x[], const float y[], const float z[], float &
 	memcpy(fit2_params, fit1_params, sizeof(fit1_params));
 
 	for (uint8_t i = 0; i < 4; i++) {
-		JTJ[i * 4 + i] += _sphere_lambda;
-		JTJ2[i * 4 + i] += _sphere_lambda / lma_damping;
+		JTJ(i, i) += _sphere_lambda;
+		JTJ2(i, i) += _sphere_lambda / lma_damping;
 	}
 
-	if (!inverse4x4(JTJ, JTJ)) {
+	if (!JTJ.I(JTJ)) {
 		return -1;
 	}
 
-	if (!inverse4x4(JTJ2, JTJ2)) {
+	if (!JTJ2.I(JTJ2)) {
 		return -1;
 	}
 
 	for (uint8_t row = 0; row < 4; row++) {
 		for (uint8_t col = 0; col < 4; col++) {
-			fit1_params[row] -= JTFI[col] * JTJ[row * 4 + col];
-			fit2_params[row] -= JTFI[col] * JTJ2[row * 4 + col];
+			fit1_params[row] -= JTFI[col] * JTJ(row, col);
+			fit2_params[row] -= JTFI[col] * JTJ2(row, col);
 		}
 	}
 
@@ -397,12 +396,10 @@ int run_lm_ellipsoid_fit(const float x[], const float y[], const float z[], floa
 	float fitness = _fitness;
 	float fit1 = 0.0f, fit2 = 0.0f;
 
-	float JTJ[81];
-	float JTJ2[81];
+	matrix::SquareMatrix<float, 9> JTJ;
+	matrix::SquareMatrix<float, 9> JTJ2;
 	float JTFI[9];
 	float residual = 0.0f;
-	memset(JTJ, 0, sizeof(JTJ));
-	memset(JTJ2, 0, sizeof(JTJ2));
 	memset(JTFI, 0, sizeof(JTFI));
 	float ellipsoid_jacob[9];
 
@@ -432,8 +429,8 @@ int run_lm_ellipsoid_fit(const float x[], const float y[], const float z[], floa
 		for (uint8_t i = 0; i < 9; i++) {
 			// compute JTJ
 			for (uint8_t j = 0; j < 9; j++) {
-				JTJ[i * 9 + j] += ellipsoid_jacob[i] * ellipsoid_jacob[j];
-				JTJ2[i * 9 + j] += ellipsoid_jacob[i] * ellipsoid_jacob[j]; //a backup JTJ for LM
+				JTJ(i, j) += ellipsoid_jacob[i] * ellipsoid_jacob[j];
+				JTJ2(i, j) += ellipsoid_jacob[i] * ellipsoid_jacob[j]; //a backup JTJ for LM
 			}
 
 			JTFI[i] += ellipsoid_jacob[i] * residual;
@@ -448,25 +445,22 @@ int run_lm_ellipsoid_fit(const float x[], const float y[], const float z[], floa
 	memcpy(fit2_params, fit1_params, sizeof(fit1_params));
 
 	for (uint8_t i = 0; i < 9; i++) {
-		JTJ[i * 9 + i] += _sphere_lambda;
-		JTJ2[i * 9 + i] += _sphere_lambda / lma_damping;
+		JTJ(i, i) += _sphere_lambda;
+		JTJ2(i, i) += _sphere_lambda / lma_damping;
 	}
 
-
-	if (!mat_inverse(JTJ, JTJ, 9)) {
+	if (!JTJ.I(JTJ)) {
 		return -1;
 	}
 
-	if (!mat_inverse(JTJ2, JTJ2, 9)) {
+	if (!JTJ2.I(JTJ2)) {
 		return -1;
 	}
-
-
 
 	for (uint8_t row = 0; row < 9; row++) {
 		for (uint8_t col = 0; col < 9; col++) {
-			fit1_params[row] -= JTFI[col] * JTJ[row * 9 + col];
-			fit2_params[row] -= JTFI[col] * JTJ2[row * 9 + col];
+			fit1_params[row] -= JTFI[col] * JTJ(row, col);
+			fit2_params[row] -= JTFI[col] * JTJ2(row, col);
 		}
 	}
 

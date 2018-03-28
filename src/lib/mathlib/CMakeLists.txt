@@ -35,6 +35,5 @@ px4_add_module(
 	COMPILE_FLAGS
 	SRCS
 		math/test/test.cpp
-		math/matrix_alg.cpp
 		math/filter/LowPassFilter2p.cpp
 	)

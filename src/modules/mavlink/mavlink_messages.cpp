@@ -51,6 +51,7 @@
 #include <drivers/drv_rc_input.h>
 #include <lib/ecl/geo/geo.h>
 #include <mathlib/mathlib.h>
+#include <matrix/math.hpp>
 #include <px4_time.h>
 #include <systemlib/err.h>
 #include <systemlib/mavlink_log.h>

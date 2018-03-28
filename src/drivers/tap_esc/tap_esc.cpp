@@ -39,6 +39,7 @@
 #include <errno.h>
 #include <termios.h>
 #include <cmath>	// NAN
+#include <cstring>
 
 #include <lib/mathlib/mathlib.h>
 #include <systemlib/px4_macros.h>

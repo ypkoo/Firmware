@@ -44,6 +44,7 @@
 
 #include <systemlib/param/param.h>
 #include <mathlib/mathlib.h>
+#include <matrix/math.hpp>
 
 #include "common.h"
 

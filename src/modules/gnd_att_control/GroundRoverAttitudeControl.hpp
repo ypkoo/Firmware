@@ -48,6 +48,7 @@
 
 #include <drivers/drv_hrt.h>
 #include <mathlib/mathlib.h>
+#include <matrix/math.hpp>
 #include <systemlib/param/param.h>
 #include <systemlib/pid/pid.h>
 #include <systemlib/perf_counter.h>
