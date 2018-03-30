@@ -67,6 +67,7 @@
 #include <uORB/topics/differential_pressure.h>
 #include <uORB/topics/estimator_status.h>
 #include <uORB/topics/sensor_preflight.h>
+#include <uORB/topics/system_power.h>
 #include <uORB/topics/vehicle_gps_position.h>
 
 #include "PreflightCheck.h"
@@ -448,6 +449,47 @@ out:
 	return success;
 }
 
+static bool powerCheck(orb_advert_t *mavlink_log_pub, bool report_fail, bool prearm)
+{
+	bool success = true; // start with a pass and change to a fail if any test fails
+
+	if (prearm) {
+		int system_power_sub = orb_subscribe(ORB_ID(system_power));
+
+		system_power_s system_power = {};
+
+		if (orb_copy(ORB_ID(system_power), system_power_sub, &system_power) == PX4_OK) {
+
+			/* copy avionics voltage */
+			int avionics_power_rail_voltage = system_power.voltage5V_v;
+
+			// avionics rail
+			// Check avionics rail voltages
+			if (avionics_power_rail_voltage < 4.5f) {
+				success = false;
+
+				if (report_fail) {
+					mavlink_log_critical(mavlink_log_pub, "PREFLIGHT FAIL: Avionics power low: %6.2f Volt", (double)avionics_power_rail_voltage);
+				}
+
+			} else if (avionics_power_rail_voltage < 4.9f) {
+				if (report_fail) {
+					mavlink_log_critical(mavlink_log_pub, "CAUTION: Avionics power low: %6.2f Volt", (double)avionics_power_rail_voltage);
+				}
+
+			} else if (avionics_power_rail_voltage > 5.4f) {
+				if (report_fail) {
+					mavlink_log_critical(mavlink_log_pub, "CAUTION: Avionics power high: %6.2f Volt", (double)avionics_power_rail_voltage);
+				}
+			}
+		}
+
+		orb_unsubscribe(system_power_sub);
+	}
+
+	return success;
+}
+
 static bool ekf2Check(orb_advert_t *mavlink_log_pub, bool optional, bool report_fail, bool enforce_gps_required)
 {
 	bool success = true; // start with a pass and change to a fail if any test fails
@@ -461,7 +503,7 @@ static bool ekf2Check(orb_advert_t *mavlink_log_pub, bool optional, bool report_
 		goto out;
 	}
 
-	// Check if preflight check perfomred by estimator has failed
+	// Check if preflight check performed by estimator has failed
 	if (status.pre_flt_fail) {
 		if (report_fail) {
 			mavlink_log_critical(mavlink_log_pub, "PREFLIGHT FAIL: EKF INTERNAL CHECKS");
@@ -570,7 +612,7 @@ out:
 }
 
 bool preflightCheck(orb_advert_t *mavlink_log_pub, bool checkSensors, bool checkAirspeed, bool checkRC, bool checkGNSS,
-		    bool checkDynamic, bool isVTOL, bool reportFailures, bool prearm, const hrt_abstime& time_since_boot)
+		    bool checkDynamic, bool checkPower, bool isVTOL, bool reportFailures, bool prearm, const hrt_abstime &time_since_boot)
 {
 
 	if (time_since_boot < 2000000) {
@@ -622,7 +664,7 @@ bool preflightCheck(orb_advert_t *mavlink_log_pub, bool checkSensors, bool check
 		/* check if the primary device is present */
 		if (!prime_found && prime_id != 0) {
 			if ((reportFailures && !failed)) {
-				mavlink_log_critical(mavlink_log_pub, "Warning: Primary compass not found");
+				mavlink_log_critical(mavlink_log_pub, "Primary compass not found");
 			}
 			failed = true;
 		}
@@ -660,7 +702,7 @@ bool preflightCheck(orb_advert_t *mavlink_log_pub, bool checkSensors, bool check
 		/* check if the primary device is present */
 		if (!prime_found && prime_id != 0) {
 			if ((reportFailures && !failed)) {
-				mavlink_log_critical(mavlink_log_pub, "Warning: Primary accelerometer not found");
+				mavlink_log_critical(mavlink_log_pub, "Primary accelerometer not found");
 			}
 			failed = true;
 		}
@@ -692,7 +734,7 @@ bool preflightCheck(orb_advert_t *mavlink_log_pub, bool checkSensors, bool check
 		/* check if the primary device is present */
 		if (!prime_found && prime_id != 0) {
 			if ((reportFailures && !failed)) {
-				mavlink_log_critical(mavlink_log_pub, "Warning: Primary gyro not found");
+				mavlink_log_critical(mavlink_log_pub, "Primary gyro not found");
 			}
 			failed = true;
 		}
@@ -725,7 +767,7 @@ bool preflightCheck(orb_advert_t *mavlink_log_pub, bool checkSensors, bool check
 		// // check if the primary device is present
 		if (!prime_found && prime_id != 0) {
 			if (reportFailures && !failed) {
-				mavlink_log_critical(mavlink_log_pub, "warning: primary barometer not operational");
+				mavlink_log_critical(mavlink_log_pub, "Primary barometer not operational");
 			}
 			failed = true;
 		}
@@ -751,6 +793,14 @@ bool preflightCheck(orb_advert_t *mavlink_log_pub, bool checkSensors, bool check
 			if (reportFailures) {
 				mavlink_log_critical(mavlink_log_pub, "RC calibration check failed");
 			}
+
+			failed = true;
+		}
+	}
+
+	/* ---- SYSTEM POWER ---- */
+	if (checkPower) {
+		if (!powerCheck(mavlink_log_pub, (reportFailures && !failed), prearm)) {
 			failed = true;
 		}
 	}
