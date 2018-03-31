@@ -542,8 +542,8 @@ def createBuildNode(String docker_repo, String target) {
           sh('make ' + target)
           sh('ccache -s')
           sh('make sizes')
-          archiveArtifacts(artifacts: 'build/*/*.px4', fingerprint: true)
-          archiveArtifacts(artifacts: 'build/*/*.elf', fingerprint: true)
+          //archiveArtifacts(artifacts: 'build/*/*.px4', fingerprint: true)
+          //archiveArtifacts(artifacts: 'build/*/*.elf', fingerprint: true)
         }
       }
     }
